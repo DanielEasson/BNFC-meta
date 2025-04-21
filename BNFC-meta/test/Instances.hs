@@ -396,7 +396,7 @@ genSafeString3 idents = listOf1 (elements (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'
 genTerminals :: [Language.LBNF.Grammar.Ident] -> Gen [Language.LBNF.Grammar.Item]
 genTerminals idents =
   choose (1, 5) >>= \numTerms ->
-    vectorOf numTerms $ Language.LBNF.Grammar.Terminal <$> genSafeString3 idents
+    vectorOf numTerms $ Language.LBNF.Grammar.Terminal <$> genSafeString3 idents <*> pure NoAnnotations
 
 -- Inserts an optional list at a random index in the list of items
 insertOptionalItem :: Language.LBNF.Grammar.Item -> Bool -> [Language.LBNF.Grammar.Item] -> Gen [Language.LBNF.Grammar.Item]
@@ -415,13 +415,13 @@ genRHS :: [Language.LBNF.Grammar.Ident] -> Language.LBNF.Grammar.Ident -> Bool -
 genRHS idents ident isList = do
     numItems <- choose (1, 5)
     baseList <- vectorOf numItems $ frequency
-        [ (2, Language.LBNF.Grammar.Terminal <$> genSafeString3 idents)
-        , (1, Language.LBNF.Grammar.NTerminal . Language.LBNF.Grammar.IdCat <$> elements idents)
+        [ (2, Language.LBNF.Grammar.Terminal <$> genSafeString3 idents <*> pure NoAnnotations)
+        , (1, Language.LBNF.Grammar.NTerminal <$> (Language.LBNF.Grammar.IdCat <$> elements idents) <*> pure NoAnnotations)
         ]
     markers <- vectorOf 2 $ genSafeString3 idents
-    let headMarker = Language.LBNF.Grammar.Terminal (head markers)  
-    let tailMarker = Language.LBNF.Grammar.Terminal (last markers) 
-    let optionalItem = (Language.LBNF.Grammar.NTerminal . Language.LBNF.Grammar.ListCat . Language.LBNF.Grammar.IdCat) ident
+    let headMarker = Language.LBNF.Grammar.Terminal (head markers) NoAnnotations  
+    let tailMarker = Language.LBNF.Grammar.Terminal (last markers) NoAnnotations
+    let optionalItem = Language.LBNF.Grammar.NTerminal (Language.LBNF.Grammar.ListCat $ Language.LBNF.Grammar.IdCat ident) NoAnnotations
     modifiedBase <- insertOptionalItem optionalItem isList (nub baseList)
     return $ headMarker : modifiedBase ++ [tailMarker]
 
@@ -451,7 +451,7 @@ instance Arbitrary Language.LBNF.Grammar.RHS where
 deriving instance Generic Language.LBNF.Grammar.Item
 
 instance Arbitrary Language.LBNF.Grammar.Item where
-  arbitrary = Language.LBNF.Grammar.Terminal <$> genSafeString
+  arbitrary = Language.LBNF.Grammar.Terminal <$> genSafeString <*> pure NoAnnotations
 
 -- Generates a random grammar at compile time
 generateGrammar :: Q Language.LBNF.Grammar.Grammar
