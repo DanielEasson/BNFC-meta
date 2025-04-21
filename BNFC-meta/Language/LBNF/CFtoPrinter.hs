@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-
     BNF Converter: Pretty-printer generator
     Copyright (C) 2004  Author:  Aarne Ranta
@@ -55,7 +56,7 @@ ownPrintRule cf own = do
       else conP (mkName own) [varP i]
     body = normalB [|doc (showString $(varE i))|]
     prtc = funD ('prt) [clause [wildP, posn] body []]
-  instanceD (cxt []) (appT (conT $ ''Print) $ conT $ mkName own) [prtc]
+  instanceD (cxt []) (appT (conT $ ''Print) $ conT $ mkName own) [prtc]  
 
 {-unlines $ [
   "instance Print " ++ own ++ " where",
@@ -134,8 +135,8 @@ ifList cf cat = mkListRule $ nil cat ++ one cat ++ cons cat where
   mtch (p,e) = match p (normalB e) []
 
 
-mkRhs :: [String] -> Either [Either String String] a -> ExpQ
-mkRhs args (Left its) = [| concatD $(listE $ mk args its) |]
+mkRhs :: [String] -> Either [(b, Either String String)] a -> ExpQ
+mkRhs args (Left its) = [| concatD $(listE $ mk args (map snd its)) |]
  where
   mk args (Left "#" : items)      = mk args items
   mk (arg:args) (Left c : items)  = prt' c (arg)        : mk args items

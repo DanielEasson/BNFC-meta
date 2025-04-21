@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Language.LBNF.TypeChecker where
 
@@ -40,7 +41,7 @@ buildContext cf@(_,rules) =
     ("Ident" : tokenNames cf)
   where
 
-    mkType cat (Left args) = FunT [ mkBase t | Left t <- args, t /= internalCat ]
+    mkType cat (Left args) = FunT [ mkBase t | (_,Left t) <- args, t /= internalCat ]
                                   (mkBase cat)
     mkType cat (Right reg) = FunT [ BaseT "String" ] (mkBase cat)
     mkBase t

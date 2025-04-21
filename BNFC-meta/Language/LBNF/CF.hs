@@ -1,4 +1,5 @@
 {-#Language PatternGuards#-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-
     BNF Converter: Abstract syntax
     Copyright (C) 2004  Author:  Markus Forberg, Michael Pellauer, Aarne Ranta
@@ -89,6 +90,7 @@ module Language.LBNF.CF (
             isNormal,
             isAqFun,
             hasIdent,
+            hasLine,
             hasLayout,
             hasAq,
             rename,
@@ -104,6 +106,9 @@ module Language.LBNF.CF (
             visibleNames,
             quoterName,
             quoters,
+            defaultFg,
+            defaultBg,
+            defaultStyle
 {-
             CFP,            -- CF with profiles
             RuleP,
@@ -119,9 +124,9 @@ module Language.LBNF.CF (
            ) where
 
 import Language.LBNF.Utils (prParenth,(+++))
-import Data.List (nub, intersperse, partition, sort,sort,group)
+import Data.List (nub, intersperse, partition, sort,sort,group, (\\), isPrefixOf)
 import Data.Char
-import Language.LBNF.Grammar (Reg())
+import Language.LBNF.Grammar (Reg(), Annotation())
 
 
 -- A context free grammar consists of a set of rules and some extended
@@ -159,7 +164,7 @@ rhsRule :: Rule -> RHS
 rhsRule = snd . snd
 
 
-type RHS  = Either [Either Cat String] (Reg,String)
+type RHS  = Either [(Maybe [Annotation], Either Cat String)] (Reg,String)
 type Rule = (Fun, (Cat, RHS))
 
 -- polymorphic types for common type signatures for CF and CFP
@@ -221,7 +226,9 @@ data Pragma = CommentS  String
             | Derive [String]
             | FunDef String [String] Exp
             | AntiQuote String String String
-            -- ...
+            | DefaultFg String
+            | DefaultBg String
+            | DefaultStyle String
               deriving (Show, Eq)
 
 ruleTokens :: CF -> [(String,Reg)]
@@ -245,6 +252,29 @@ derivations cf  = case concat [ss|Derive ss <- pragmasOfCF cf] of
   [] -> ["Show", "Eq", "Ord"]
   x  -> x
 
+defaultFg :: CF -> Either String [String]
+defaultFg cf = case [c | DefaultFg c <- pragmasOfCF cf] of
+  [] -> Left ""
+  [c] | "Color_9" `isPrefixOf` c -> Right $ words $ drop 8 c
+  [x] -> Left x
+  many -> error "defaultFg: Multiple default foreground pragmas"
+
+defaultBg :: CF -> Either String [String]
+defaultBg cf = case [c | DefaultBg c <- pragmasOfCF cf] of
+  [] -> Left ""
+  [c] | "Color_9" `isPrefixOf` c -> Right $ words $ drop 8 c
+  [x] -> Left x
+  many -> error "defaultBg: Multiple default background pragmas"
+
+defaultStyle :: CF -> [String]
+defaultStyle cf = 
+  let styles = [c | DefaultStyle c <- pragmasOfCF cf]
+  in if isUnique styles
+     then styles
+     else error "defaultStyle: Duplicate styles pragmas"
+
+isUnique :: Eq a => [a] -> Bool
+isUnique xs = null (xs \\ nub xs)
 
 hasLayout :: CF -> Bool
 hasLayout cf = case layoutPragmas cf of
@@ -383,7 +413,7 @@ allCatsIdNorm = nub . map identCat . map normCat . allCats
 
 -- category is used on an rhs
 isUsedCat :: CF -> Cat -> Bool
-isUsedCat cf cat = elem cat [c | r <- (rulesOfCF cf), Left c <- oldRHS (rhsRule r)]
+isUsedCat cf cat = elem cat [c | r <- (rulesOfCF cf), (_,Left c) <- oldRHS (rhsRule r)]
 
 -- entry points to parser ----
 allEntryPoints :: CF -> [Cat]
@@ -439,6 +469,9 @@ comments cf = case commentPragmas (pragmasOfCF cf) of
 hasIdent :: CF -> Bool
 hasIdent cf = isUsedCat cf "Ident"
 
+hasLine :: CF -> Bool
+hasLine cf = isUsedCat cf "Line"
+
 -- these need new datatypes
 specialCats :: CF -> [Cat]
 specialCats cf = (if hasIdent cf then ("Ident":) else id) (map fst (tokenPragmas cf))
@@ -464,7 +497,7 @@ cf2data cf =
       | cat <- allNormalCats cf]
  where
   mkData :: Rule -> (Fun,Either [Cat] (String))
-  mkData (f,(_,Left its)) = (normFun f,Left [normCat c | Left c <- its, c /= internalCat])
+  mkData (f,(_,Left its)) = (normFun f,Left [normCat c | (_,Left c) <- its, c /= internalCat])
   mkData (f,(_,Right (r,tok)))  = (normFun f,Right tok)
 
 {-
@@ -534,8 +567,8 @@ isNormal :: Cat -> Bool
 isNormal c = not (isList c || isDigit (last c) || isAqFun c)
 
 isParsable :: Rul f -> Bool
-isParsable (_,(_, Left (Left "#":_))) = False
-isParsable (_,(_, Left (Left "$":_))) = False
+isParsable (_,(_, Left ((_,Left "#"):_))) = False
+isParsable (_,(_, Left ((_,Left "$"):_))) = False
 isParsable _ = True
 
 isList :: Cat -> Bool
@@ -581,8 +614,8 @@ findAllReversibleCats cf = [c | (c,r) <- ruleGroups cf, isRev c r] where
                            else False
      _ -> False
   tryRev :: Rule ->  Rule ->  Bool
-  tryRev (f,(_,Left (ts@(x:_:xs)))) r = isEmptyNilRule r &&
-                                 isConsFun f && isNonterm x && isNonterm (last ts)
+  tryRev (f,(_,Left (ts@((_,x):_:xs)))) r = isEmptyNilRule r &&
+                                 isConsFun f && isNonterm x && isNonterm (last (map snd ts))
   tryRev _ _ = False
 
 isEmptyNilRule (f,(_,Left ts)) = isNilFun f && null ts
@@ -651,7 +684,7 @@ checkRule cf r@(f,(cat,rhs))
    badFunName = not (all (\c -> isAlphaNum c || c == '_') f {-isUpper (head f)-}
        || isCoercion f || isNilFun f || isOneFun f || isConsFun f || isAqFun f)
    transRHS :: RHS -> [Either Cat String]
-   transRHS = either id (const [])
+   transRHS = map snd . either id (const [])
 
 isPositionCat :: CFG f -> Cat -> Bool
 isPositionCat cf cat =  or [b | TokenReg name b _ <- pragmasOfCF cf, name == cat]
@@ -670,3 +703,4 @@ quoters = map identCat . allEntryPoints -- FIXME: List cats
 initLower :: String -> String
 initLower []  = error "initLower : Empty list"
 initLower (c:cs) = toLower c : cs
+

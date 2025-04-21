@@ -1,2 +1,3 @@
-packages: BNFC-meta alex-meta happy-meta
+packages: BNFC-meta alex-meta happy-meta wl-pprint-annotated wl-pprint-console
 tests: True
+

@@ -16,6 +16,14 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 -}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant bracket" #-}
+{-# HLINT ignore "Use ++" #-}
+{-# HLINT ignore "Eta reduce" #-}
+{-# HLINT ignore "Use unwords" #-}
+{-# HLINT ignore "Move brackets to avoid $" #-}
+{-# HLINT ignore "Use intercalate" #-}
+{-# HLINT ignore "Redundant where" #-}
 
 module Language.LBNF.CFtoHappy
        (
@@ -144,7 +152,7 @@ generateAction nt f ms = MkAction (if isCoercion f then Nothing else Just f) ms
 generatePatterns :: CF -> Rule -> (Pattern,[(Bool,Cat,MetaVar)])
 generatePatterns cf r = case rhsRule r of
   Left []   -> ([Right "{- empty -}"],[])
-  Left its  -> ((map mkIt its), metas its)
+  Left its  -> ((map (mkIt . snd) its), metas (map snd its))
   Right (_,tok)   -> ([Right $ "L_" ++  tok],[(False,funRule r,"$1")])
  where
    mkIt i = case i of

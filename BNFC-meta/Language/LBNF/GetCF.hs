@@ -16,6 +16,7 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 -}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 
 module Language.LBNF.GetCF where
@@ -33,7 +34,7 @@ import Language.LBNF.Runtime
 import Data.Char
 import Language.LBNF.TypeChecker
 
-type TempRHS = Either [Either String String] Reg
+type TempRHS = Either [TempItem] Reg
 type TempRule = (Fun,(Cat,TempRHS))
 
 getCF :: String -> (CF, [String])
@@ -53,7 +54,7 @@ getCFofG g = (cf,msgs ++ msgs1) where
   srt rs = let
        rules              = [fixRuleTokens n r | (n,Left (Right r)) <- zip [1..] rs]
        literals           = nub  [lit | Left xs <- map (snd . snd) rules,
-                                   (Left lit) <- xs,
+                                   (_,Left lit) <- xs,
                                    elem lit specialCatsP]
 
        pragma             = [r | Left (Left r) <- rs]
@@ -63,7 +64,7 @@ getCFofG g = (cf,msgs ++ msgs1) where
        notIdent s         = null s || not (isIdentAlpha (head s)) || any (not . isIdentRest) s
        isIdentAlpha c     = isLatin1 c && isAlpha c
        isIdentRest c      = isIdentAlpha c || isDigit c || c == '_' || c == '\''
-       reservedWords      = nub [t | (_,(_,Left its)) <- rules, Right t <- its] ++
+       reservedWords      = nub [t | (_,(_,Left its)) <- rules, (_,Right t) <- its] ++
          concatMap (reservedLiteralAQ [ (b,i,a) | AntiQuote b i a <- pragma ]) (literals ++ tokens)
        cats               = []
             in (((pragma,(literals,symbols,keywords,cats)),rules),errors)
@@ -76,6 +77,7 @@ getCFofG g = (cf,msgs ++ msgs1) where
 fixRuleTokens :: Int -> TempRule -> Rule
 fixRuleTokens n (f,(c,rhs)) =
   (f,(c,either Left (\r -> Right (r,"RTL_"++show n)) rhs))
+
 
 
 
@@ -107,7 +109,7 @@ transDef defs x = case x of
  Abs.PosToken ident reg        -> [Left $ TokenReg (transIdent ident) True reg]
  Abs.Entryp idents             -> [Left $ EntryPoints (map transIdent idents)]
  Abs.Internal label cat items  ->
-   [Right (transLabel label,(transCat cat,(Left $ Left "#":(map transItem items))))]
+   [Right (transLabel label,(transCat cat,(Left $ (Nothing, Left "#"):(map transItem items))))]
  Abs.Separator size ident str -> map  Right $ separatorRules size ident str
  Abs.Terminator size ident str -> map  Right $ terminatorRules size ident str
  Abs.Coercions ident int -> map  (Right) $ coercionRules ident int
@@ -122,6 +124,9 @@ transDef defs x = case x of
    ++ [Left  $ TokenReg "AqToken" False $ aqToken i a]
    ++ aqRules (b,i,a) (getCats defs) where
    reg = aqToken a
+ Abs.Foreground c -> [Left $ DefaultFg (show c)] 
+ Abs.Background c -> [Left $ DefaultBg (show c)]
+ Abs.Style c -> [Left $ DefaultStyle (show c)]
 
 aqToken :: String -> String -> Abs.Reg
 aqToken i s@(c:cs) = Abs.RSeq (Abs.RSeqs i) $ Abs.RSeq (Abs.RStar $ foldr1 Abs.RAlt $ map clause prefixes) $ Abs.RSeqs s where
@@ -138,12 +143,12 @@ getCats = nub . concatMap (\x -> case x of
 
 aqRHS :: [Abs.Item] -> Cat
 aqRHS xs = case filter filt xs of
-  [Abs.NTerminal cat] -> transCat cat
+  [Abs.NTerminal cat _ ] -> transCat cat
   _ -> error "anti-quotation rules must have exactly one non-terminal"
   where
     filt x  =case x of
-      Abs.Terminal str   -> False
-      Abs.NTerminal cat  -> True
+      Abs.Terminal str _   -> False
+      Abs.NTerminal cat _  -> True
 
 
 toks x = case x of
@@ -154,8 +159,8 @@ toks x = case x of
 aqRules :: (String,String,String) -> [String] -> [Either Pragma TempRule]
 aqRules (b,i,a) = concatMap aqRule where
   aqRule cat = map Right [
-      (aqFun,(cat, Left [Right b,Left "AqToken"])),
-      (aqFun,(cat, Left [Right (b++normCat cat), Left "AqToken"]))
+      (aqFun,(cat, Left [(Nothing, Right b),(Nothing, Left "AqToken")])),
+      (aqFun,(cat, Left [(Nothing, Right (b++normCat cat)), (Nothing, Left "AqToken")]))
       ]
 
 aqFun = "$global_aq"
@@ -177,8 +182,8 @@ aqFun = "$global_aq"
 
 separatorRules :: Abs.MinimumSize -> Abs.Cat -> String -> [TempRule]
 separatorRules size c s = if null s then terminatorRules size c s else ifEmpty [
-  ("(:[])", (cs,Left [Left c'])),
-  ("(:)",   (cs,Left [Left c', Right s, Left cs]))
+  ("(:[])", (cs,Left [(Nothing, Left c')])),
+  ("(:)",   (cs,Left [(Nothing, Left c'), (Nothing, Right s), (Nothing, Left cs)]))
   ]
  where
    c' = transCat c
@@ -188,21 +193,21 @@ separatorRules size c s = if null s then terminatorRules size c s else ifEmpty [
 terminatorRules :: Abs.MinimumSize -> Abs.Cat -> String -> [TempRule]
 terminatorRules size c s = [
   ifEmpty,
-  ("(:)",   (cs,Left $ Left c' : s' [Left cs]))
+  ("(:)",   (cs,Left $ (Nothing, Left c') : s' [(Nothing, Left cs)]))
   ]
  where
    c' = transCat c
    cs = "[" ++ c' ++ "]"
-   s' its = if null s then its else (Right s : its)
+   s' its = if null s then its else ((Nothing, Right s) : its)
    ifEmpty = if (size == Abs.MNonempty)
-                then ("(:[])",(cs,Left $ [Left c'] ++ if null s then [] else [Right s]))
+                then ("(:[])",(cs,Left $ [(Nothing, Left c')] ++ if null s then [] else [(Nothing, Right s)]))
                 else ("[]",   (cs,Left []))
 
 coercionRules :: Abs.Ident -> Integer -> [TempRule]
 coercionRules (Abs.Ident c) n =
-   ("_", (c,               Left [Left (c ++ "1")])) :
-  [("_", (c ++ show (i-1), Left [Left (c ++ show i)])) | i <- [2..n]] ++
-  [("_", (c ++ show n,     Left [Right "(", Left c, Right ")"]))]
+   ("_", (c,               Left [(Nothing, Left (c ++ "1"))])) :
+  [("_", (c ++ show (i-1), Left [(Nothing, Left (c ++ show i))])) | i <- [2..n]] ++
+  [("_", (c ++ show n,     Left [(Nothing, Right "("), (Nothing, Left c), (Nothing, Right ")")]))]
 
 
 ebnfRules :: Abs.Ident -> [Abs.RHS] -> [TempRule]
@@ -211,8 +216,8 @@ ebnfRules (Abs.Ident c) rhss =
  where
    mkFun :: Int -> String -> Abs.RHS -> String
    mkFun k c i = case i of
-     (Abs.RHS [Abs.Terminal s])  -> c' ++ "_" ++ mkName k s
-     (Abs.RHS [Abs.NTerminal n]) -> c' ++ identCat (transCat n)
+     (Abs.RHS [Abs.Terminal s _])  -> c' ++ "_" ++ mkName k s
+     (Abs.RHS [Abs.NTerminal n _]) -> c' ++ identCat (transCat n)
      _ -> c' ++ "_" ++ show k
    c' = c --- normCat c
    mkName k s = if all (\c -> isAlphaNum c || elem c "_'") s
@@ -223,12 +228,23 @@ transRHS :: Abs.RHS -> TempRHS
 transRHS (Abs.RHS its) = Left $ map transItem its
 transRHS (Abs.TRHS r)  = Right r
 
+type TempItem = (TempAnnotation, Either Cat String)
+type TempAnnotation = Maybe [Abs.Annotation]
 
-
-transItem :: Abs.Item -> Either Cat String
+transItem :: Abs.Item -> TempItem
 transItem x = case x of
- Abs.Terminal str   -> Right str
- Abs.NTerminal cat  -> Left (transCat cat)
+ Abs.Terminal str ann   -> (transAnnotation ann, Right str)
+ Abs.NTerminal c@(Abs.ListCat cat) ann -> ((addEmpty . transAnnotation) ann, Left (transCat c))
+ Abs.NTerminal cat ann  -> (transAnnotation ann, Left (transCat cat))
+
+addEmpty :: Maybe [Abs.Annotation] -> Maybe [Abs.Annotation]
+addEmpty Nothing = Just [Abs.Annotation_Empty]
+addEmpty (Just as) = Just (Abs.Annotation_Empty : as)
+
+transAnnotation :: Abs.MAnnotations -> Maybe [Abs.Annotation]
+transAnnotation ann = case ann of
+ Abs.NoAnnotations -> Nothing
+ Abs.JAnnotations as -> Just as
 
 transCat :: Abs.Cat -> Cat
 transCat x = case x of

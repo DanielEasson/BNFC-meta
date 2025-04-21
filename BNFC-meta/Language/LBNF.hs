@@ -20,6 +20,7 @@ import Language.LBNF.CFtoAlex2(cf2alex2, abstractAlex, concreteAlex)
 import Language.LBNF.CFtoHappy(cf2Happy, abstractHappy, concreteHappy)
 import Language.LBNF.CFtoQQ(cf2qq)
 import Language.LBNF.CFtoPrinter
+import Language.LBNF.CFtoPrettyPrinter
 import Language.LBNF.CFtoLayout
 
 import Language.LBNF.Compiletime
@@ -44,6 +45,7 @@ lbnf = grammar
 --
 -- The spliced code contains a parser, a pretty-printer and a Quasi-Quoter for
 -- the language defined by the grammar.
+-- Annotations written in the grammar are removed.
 bnfc :: Grammar -> Q [Dec]
 bnfc = compile . toCF
 
@@ -58,7 +60,8 @@ compile g = do
 --  m <- fmap loc_module location
   datas  <- absRules g
   tokens <- absTokens g
-  pretty <- cf2Printer g
+  printer <- cf2Printer g
+  pretty <- cf2PrettyPrinter g
   dEp    <- cf2qq g
   dalx   <- abstractAlex g
   dhpy   <- abstractHappy l g
@@ -66,6 +69,7 @@ compile g = do
   hidden <- hide g $ concat
         [ datas
         , tokens
+        , printer
         , pretty
         , dEp
         , dalx
@@ -103,7 +107,7 @@ dumpAlex :: Grammar -> Q [Dec]
 dumpAlex g = do
   let cf = toCF g
   runIO $ writeFile "dump.x" $ cf2alex2 cf
-  compile cf
+  compile cf 
 
 -- | Equivalent to 'bnfc' with the side-effect of dumping ALL the spliced code
 -- into a file named dump.hs
@@ -119,7 +123,8 @@ getCode m g = do
   let cf = toCF g
   datas  <- runQ $ absRules cf
   tokens <- runQ $ absTokens cf
-  pretty <- runQ $ cf2Printer cf
+  printer <- runQ $ cf2Printer cf 
+  pretty <- runQ $ cf2PrettyPrinter cf
   dEp    <- runQ $ cf2qq cf
   let header = unlines
         [ "{-# LANGUAGE TemplateHaskell #-}"
@@ -127,10 +132,11 @@ getCode m g = do
         , "module "++m++exportList (m++".") cf++" where"
         , "import Language.LBNF.Compiletime"
         , "import Language.Haskell.TH(lift,loc_package,location)"
+        , "import Text.PrettyPrint.Leijen"
         ]
       res = unlines [
         header,
-        uglyPrint $ pprint $ concat [datas , tokens, pretty, dEp],
+        uglyPrint $ pprint $ concat [datas , tokens, printer, pretty, dEp],
         concreteAlex cf,
         concreteHappy (Loc {loc_module = m, loc_package = " $(fmap loc_package location >>= lift) "}) cf
         ]

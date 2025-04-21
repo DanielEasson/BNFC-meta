@@ -53,11 +53,15 @@ Library
     , happy-meta >= 0.2.0.4 && < 0.3
     , alex-meta >= 0.3.0.5 && < 0.4
     , syb >= 0.2 && <1.0
+    , wl-pprint-annotated
+    , wl-pprint-console
+    , colorful-monoids
   Exposed-modules:
       Language.LBNF
     , Language.LBNF.Runtime
     , Language.LBNF.Compiletime
     , Language.LBNF.Grammar
+    , Language.LBNF.CFtoPrettyPrinter
   Other-modules:
       Language.LBNF.CF
     , Language.LBNF.CFtoAbstract
