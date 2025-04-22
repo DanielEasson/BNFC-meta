@@ -64,8 +64,11 @@ The following annotations can be used:
 - Style: Sets style to italic, bold, invert, underline or blink.
 
 Additionally, defaults can be used for Fg, Bg and Style to apply every item at once likem so:
+
 DefaultFg Blue ;
+
 DefaultBg Red ;
+
 DefaultStyle Invert, Underline ;
 
 
