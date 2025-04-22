@@ -72,4 +72,6 @@ DefaultBg Red ;
 DefaultStyle Invert, Underline ;
 
 
+To pretty print an expression based on this grammar, the pprintTree function is used which takes a width parameter.
+
 
