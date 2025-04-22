@@ -34,7 +34,9 @@ The generated pretty printer can be customised, using annotations, applied to th
 For example a simple lambda calculus grammar would be:
 
 Abs. Expr ::= "\\" Ident "->" Expr ;
+
 App. Expr1 ::= Expr1 Expr2 ;
+
 Var. Expr2 ::= Ident ;
 
 coercions Expr 2 ;
@@ -42,7 +44,9 @@ coercions Expr 2 ;
 After applying annotations the grammar would be:
 
 Abs. Expr ::= "\\" (Space 1) Ident (Space 1, Nest 2, Fg Blue) "->" (Fg Red) Expr (Fg RGB 128 0 128) ;
+
 App. Expr1 ::= Expr1 Expr2 ;
+
 Var. Expr2 ::= Ident ;
 
 coercions Expr 2 ;
